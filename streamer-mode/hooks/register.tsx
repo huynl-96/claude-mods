@@ -129,6 +129,15 @@ export const register: Register = on => {
     if (savedPanes) await update($, privatePanes, () => savedPanes)
     const savedSeen = (await $.store.get('seen')) as SeenPane[] | undefined
     if (savedSeen) await update($, seen, () => savedSeen)
+    // Installed mods run in enabledPlugins order, first outermost: a mod listed ahead of this
+    // one draws before it, so its pane or band can't be covered.
+    try {
+      const settings = JSON.parse(await $.fs.read(`${await home($)}/.claude/settings.json`)) as { enabledPlugins?: Record<string, boolean> }
+      const first = Object.entries(settings.enabledPlugins ?? {}).find(([, enabled]) => enabled)?.[0]
+      if (first && !first.startsWith('streamer-mode@')) {
+        $.ui.toast(`streamer-mode can't cover mods listed before it: move "streamer-mode@…" to the top of enabledPlugins in ~/.claude/settings.json (first now: ${first})`)
+      }
+    } catch { /* no readable user settings */ }
     try {
       if ((await $.fs.read(await flagPath($))).trim()) {
         $.ui.toast('Streamer mode status line flag is still on from an earlier session: /streamer off to clear it')

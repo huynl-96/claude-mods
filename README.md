@@ -9,6 +9,8 @@ claude plugin install streamer-mode@claude-mods
 
 Run `/reload-plugins` in any open session, or start a new one.
 
+**Then move streamer-mode to the top of your plugin list.** Installed mods run in the order `enabledPlugins` lists them in `~/.claude/settings.json`, and a new install goes last. A mod listed ahead of streamer-mode draws first, so its pane or band can't be covered. Put `"streamer-mode@claude-mods": true` first in `enabledPlugins`, then start a new session. If it isn't first, streamer-mode shows a toast at session start naming the plugin ahead of it.
+
 ## streamer-mode
 
 `/streamer` hides what you don't want on a shared screen: the conversation from before you turned it on, your home folder in paths, other mods' panes (a file tree, a browser), the bands above the prompt, and your status line.
@@ -81,6 +83,7 @@ The GIFs are recorded with [vhs](https://github.com/charmbracelet/vhs) in a thro
 
 ## Changelog
 
+- **0.2.2**: warn at session start when another plugin is listed before streamer-mode in `enabledPlugins`, since mods listed earlier can't be covered.
 - **0.2.1**: a pane keeps its latest title in `/streamer settings`, since a title can name the folder it was opened on.
 - **0.2.0**: hide the conversation from before streamer mode, show the home folder as `~` in paths, remind about a leftover status line flag, opt-in keyboard shortcut.
 - **0.1.1**: cover private panes instead of closing them, so they come back as they were.

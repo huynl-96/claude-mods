@@ -67,3 +67,18 @@ test('/streamer shows only rows added after it, with paths shortened', async ($,
   await streamer($, 'off')
   expect(await draw($, 'AssistantMessage', 'aaaaaaaa-0000-4000-8000-000000000000', reply('secret plan'))).toContain('secret plan')
 })
+
+test('warns at session start when another plugin is listed before streamer-mode', async ($, on) => {
+  const toasts: string[] = []
+  on('env.get', () => ({ value: '/Users/someone' }))
+  on('command.register', () => ({ value: undefined }))
+  on('fs.read', (_: any, e: any) =>
+    String(e.path).endsWith('settings.json')
+      ? { value: JSON.stringify({ enabledPlugins: { 'filetree@x': true, 'streamer-mode@claude-mods': true } }) }
+      : { value: '' })
+  on('ui.toast', (_: any, e: any) => { toasts.push(String(e.text ?? e)); return { value: undefined } })
+  on('store.get', () => ({ value: undefined }))
+  on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/Users/someone/project' } as any)
+  expect(toasts.join('\n')).toContain('filetree@x')
+})
