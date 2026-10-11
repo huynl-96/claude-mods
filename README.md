@@ -11,7 +11,7 @@ Run `/reload-plugins` in any open session, or start a new one.
 
 ## streamer-mode
 
-`/streamer` hides what you don't want on a shared screen: other mods' panes (a file tree, a browser), the bands above the prompt, and your status line.
+`/streamer` hides what you don't want on a shared screen: the conversation from before you turned it on, your home folder in paths, other mods' panes (a file tree, a browser), the bands above the prompt, and your status line.
 
 | Command | What it does |
 |---|---|
@@ -21,6 +21,8 @@ Run `/reload-plugins` in any open session, or start a new one.
 
 While it's on:
 
+- **Earlier conversation**: only rows added after you turned it on are shown; every other message and tool row collapses to `· hidden in streamer mode`. It errs on hiding: rows from a reload or a resumed session, and anything it can't place, stay hidden. Slash command output is hidden while streamer mode is on, except `/streamer`'s own. Turn it off and everything comes back.
+- **Paths** in rows drawn while it's on show your home folder as `~`, so `/Users/you/app.ts` reads `~/app.ts`.
 - **Panes** you've marked private stay open but show "Hidden in streamer mode", and come back as they were when you turn it off. A private pane can't be opened while streamer mode is on. Filetree (`filetree`) and Terminal Browser (`browser`) are marked by default.
 - **Bands** above the prompt are replaced by one line: `● streamer mode · /streamer off to stop`.
 - **Status line** shows only `● streamer mode`, once you add the snippet below.
@@ -41,13 +43,35 @@ Status lines only rerun on session events, so add `"refreshInterval": 2` to `sta
 
 The flag file is shared by every session: turning streamer mode on in one hides the status line in all of them, and it stays on after a restart until you run `/streamer off`.
 
+### Keyboard shortcut (opt-in)
+
+Mods can't add their own shortcut actions, so streamer-mode borrows `app:toggleReplTab`, which is unbound by default and unused while the built-in `/diff` mod is on. Turn on "Keyboard shortcut" in `/streamer settings`, then bind a key in `~/.claude/keybindings.json`:
+
+```json
+{ "bindings": [ { "context": "Chat", "bindings": { "ctrl+x s": "app:toggleReplTab" } } ] }
+```
+
+While the shortcut is on, a small `○` / `◉` button sits in the band above the prompt; the key presses it.
+
+### Leftover flag reminder
+
+If a session ended with streamer mode on, the next session shows a toast saying the status line flag is still set, so a hidden status line never goes unexplained.
+
 ### What it doesn't hide
 
-The conversation itself. Anything already printed stays visible, so run `/clear` or start a new session before you share. For masking names and secrets in the conversation, see [screen-guard](https://github.com/danyuchn/claude-mods).
+- New rows from subagents in their own agent view stay hidden while streamer mode is on.
+- Names and secrets inside new messages. For that, see [screen-guard](https://github.com/danyuchn/claude-mods).
+- Screen sharing can't be detected by a mod, so turning it on is up to you.
 
 ### What it can do
 
-`claude plugin validate ./streamer-mode` lists it. It hooks session start, its own command, pane opening, and drawing panes and the band above the prompt. It reads `HOME`, writes only `~/.claude/streamer-mode`, and makes no network calls and runs no programs.
+`claude plugin validate ./streamer-mode` lists it. It hooks session start, its own command, pane opening, and rows being added, and drawing panes, transcript rows and the band above the prompt. It reads `HOME` and `~/.claude/streamer-mode`, notes the ids of rows added while it's on, writes only that file, and makes no network calls and runs no programs.
+
+## Changelog
+
+- **0.2.0**: hide the conversation from before streamer mode, show the home folder as `~` in paths, remind about a leftover status line flag, opt-in keyboard shortcut.
+- **0.1.1**: cover private panes instead of closing them, so they come back as they were.
+- **0.1.0**: first release.
 
 ## License
 
