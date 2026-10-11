@@ -13,6 +13,8 @@ Run `/reload-plugins` in any open session, or start a new one.
 
 `/streamer` hides what you don't want on a shared screen: the conversation from before you turned it on, your home folder in paths, other mods' panes (a file tree, a browser), the bands above the prompt, and your status line.
 
+![Streamer mode on and off: earlier conversation, the band and the status line hide, then come back](docs/media/toggle.gif)
+
 | Command | What it does |
 |---|---|
 | `/streamer` | Turn streamer mode on or off |
@@ -27,7 +29,13 @@ While it's on:
 - **Bands** above the prompt are replaced by one line: `● streamer mode · /streamer off to stop`.
 - **Status line** shows only `● streamer mode`, once you add the snippet below.
 
+![A private pane (Filetree) is covered while streamer mode is on, and comes back as it was](docs/media/pane.gif)
+
+![New messages show while it's on, with the home folder shown as ~](docs/media/paths.gif)
+
 ### Pick your own panes
+
+![/streamer settings: what to hide, and which panes count as private](docs/media/settings.gif)
 
 Open `/streamer settings`. Every pane opened while the mod is loaded is listed there; tick the ones to hide. Mods can't list each other's panes up front, so open a pane once for it to show up. Your choices are saved across sessions.
 
@@ -67,8 +75,13 @@ If a session ended with streamer mode on, the next session shows a toast saying 
 
 `claude plugin validate ./streamer-mode` lists it. It hooks session start, its own command, pane opening, and rows being added, and drawing panes, transcript rows and the band above the prompt. It reads `HOME` and `~/.claude/streamer-mode`, notes the ids of rows added while it's on, writes only that file, and makes no network calls and runs no programs.
 
+## Re-recording the GIFs
+
+The GIFs are recorded with [vhs](https://github.com/charmbracelet/vhs) in a throwaway project, so they show no real files or paths. See [docs/tapes](docs/tapes/README.md).
+
 ## Changelog
 
+- **0.2.1**: a pane keeps its latest title in `/streamer settings`, since a title can name the folder it was opened on.
 - **0.2.0**: hide the conversation from before streamer mode, show the home folder as `~` in paths, remind about a leftover status line flag, opt-in keyboard shortcut.
 - **0.1.1**: cover private panes instead of closing them, so they come back as they were.
 - **0.1.0**: first release.

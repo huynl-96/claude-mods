@@ -163,8 +163,11 @@ export const register: Register = on => {
 
   // Learn every pane that opens, and refuse a private one in streamer mode.
   on('ui.open', async ($, e, next) => {
-    if (e.id !== PANE && !(await read($, seen)).some(p => p.id === e.id)) {
-      const list = [...(await read($, seen)), { id: e.id, title: e.title ?? e.id }]
+    // Keep each pane's latest title: a title can name the folder it was opened on.
+    const title = e.title ?? e.id
+    const known = await read($, seen)
+    if (e.id !== PANE && !known.some(p => p.id === e.id && p.title === title)) {
+      const list = [...known.filter(p => p.id !== e.id), { id: e.id, title }]
       await update($, seen, () => list)
       await $.store.set('seen', list)
     }
@@ -205,7 +208,7 @@ export const register: Register = on => {
     const cur = await read($, hide)
     const { Box, Button, Text } = $.ui.resolve(e)
     const shortcut = cur.shortcut
-      ? <Button key="streamer-shortcut" label={streaming ? '◉' : '○'} action={SHORTCUT_ACTION} bare onPress={() => apply($, !streaming)} />
+      ? <Button key="streamer-shortcut" label={streaming ? '◉' : '○'} action={SHORTCUT_ACTION} plain dimColor onPress={() => apply($, !streaming)} />
       : null
     if (e.props.hasSurvey || !streaming || !cur.bands) {
       if (!shortcut) return next(e)
