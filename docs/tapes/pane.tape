@@ -4,6 +4,11 @@ Output ../media/pane.gif
 Hide
 Type "./launch.sh" Enter
 Sleep 9s
+Type "/filetree" Sleep 400ms Enter
+Sleep 3s
+Escape
+Sleep 1s
+Screenshot pane-pre.png
 Show
 Sleep 2s
 Type "/streamer" Sleep 400ms Enter
