@@ -1,6 +1,6 @@
 {
   "name": "streamer-mode",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "/streamer hides private panes, bands and the status line while you share your screen",
   "author": { "name": "huynl-96", "url": "https://github.com/huynl-96" },
   "license": "MIT",

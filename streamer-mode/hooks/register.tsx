@@ -35,11 +35,6 @@ async function apply($: EngineInterface, on: boolean) {
   try {
     await $.fs.write(await flagPath($), on && cur.status ? 'on\n' : '')
   } catch { /* status line flag is best effort */ }
-  if (on && cur.panes) {
-    for (const id of await read($, privatePanes)) {
-      try { await $.ui.close({ id }) } catch { /* not open */ }
-    }
-  }
   $.ui.status(on && !cur.bands ? '● streamer mode' : undefined)
   $.ui.invalidate('ui.render')
 }
@@ -87,7 +82,8 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // If a private pane stays open anyway, draw over it.
+  // Cover an open private pane rather than close it: another mod's pane can't be reopened
+  // from here, and covering lets it come back as it was when streamer mode turns off.
   on('ui.render', { component: 'Pane' }, async ($, e, next) => {
     if (!(await isHidden($, e.requestId))) return next(e)
     const { Text } = $.ui.resolve(e)

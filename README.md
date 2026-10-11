@@ -21,7 +21,7 @@ Run `/reload-plugins` in any open session, or start a new one.
 
 While it's on:
 
-- **Panes** you've marked private close, and can't reopen until you turn it off. Filetree (`filetree`) and Terminal Browser (`browser`) are marked by default.
+- **Panes** you've marked private stay open but show "Hidden in streamer mode", and come back as they were when you turn it off. A private pane can't be opened while streamer mode is on. Filetree (`filetree`) and Terminal Browser (`browser`) are marked by default.
 - **Bands** above the prompt are replaced by one line: `● streamer mode · /streamer off to stop`.
 - **Status line** shows only `● streamer mode`, once you add the snippet below.
 
