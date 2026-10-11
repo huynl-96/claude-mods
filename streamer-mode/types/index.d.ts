@@ -3,6 +3,6 @@ export type SeenPane = { id: string; title: string }
 
 declare module 'claude-code' {
   interface PluginState {
-    'streamer-mode': { isOn: boolean; hide: Hide; privatePanes: string[]; seen: SeenPane[]; freshRows: string[]; freshToolIds: string[] }
+    'streamer-mode': { isOn: boolean; hide: Hide; privatePanes: string[]; seen: SeenPane[]; freshRows: string[]; freshToolIds: string[]; shortcutKey: string; shortcutNote: string }
   }
 }

@@ -19,15 +19,16 @@ Run `/reload-plugins` in any open session, or start a new one.
 
 | Command | What it does |
 |---|---|
-| `/streamer` | Turn streamer mode on or off |
+| `/streamer` | Turn streamer mode on or off, in every session at once |
 | `/streamer on` / `/streamer off` | Set it directly |
-| `/streamer settings` | Pick what to hide |
+| `/streamer settings` | Pick what to hide, and set your shortcut |
+| `/streamer key <keys>` | Set the shortcut by typing it, such as `/streamer key ctrl+x s` |
 
 While it's on:
 
 - **Earlier conversation**: only rows added after you turned it on are shown; every other message and tool row collapses to `· hidden in streamer mode`. It errs on hiding: rows from a reload or a resumed session, and anything it can't place, stay hidden. Slash command output is hidden while streamer mode is on, except `/streamer`'s own. Turn it off and everything comes back.
 - **Paths** in rows drawn while it's on show your home folder as `~`, so `/Users/you/app.ts` reads `~/app.ts`.
-- **Panes** you've marked private stay open but show "Hidden in streamer mode", and come back as they were when you turn it off. A private pane can't be opened while streamer mode is on. Filetree (`filetree`) and Terminal Browser (`browser`) are marked by default.
+- **Panes** you've marked private stay open but show "Hidden in streamer mode", and come back as they were when you turn it off. One opened while it's on opens covered. (If another mod is listed before streamer-mode, it can't cover, so private panes are refused instead.) Filetree (`filetree`) and Terminal Browser (`browser`) are marked by default.
 - **Bands** above the prompt are replaced by one line: `● streamer mode · /streamer off to stop`.
 - **Status line** shows only `● streamer mode`, once you add the snippet below.
 
@@ -51,21 +52,21 @@ A mod can't redraw a custom status line, so the mod writes `~/.claude/streamer-m
 
 Status lines only rerun on session events, so add `"refreshInterval": 2` to `statusLine` in `~/.claude/settings.json` for the switch to show within 2 seconds.
 
-The flag file is shared by every session: turning streamer mode on in one hides the status line in all of them, and it stays on after a restart until you run `/streamer off`.
 
-### Keyboard shortcut (opt-in)
 
-Mods can't add their own shortcut actions, so streamer-mode borrows `app:toggleReplTab`, which is unbound by default and unused while the built-in `/diff` mod is on. Turn on "Keyboard shortcut" in `/streamer settings`, then bind a key in `~/.claude/keybindings.json`:
+### Keyboard shortcut
 
-```json
-{ "bindings": [ { "context": "Chat", "bindings": { "ctrl+x s": "app:toggleReplTab" } } ] }
-```
+Open `/streamer settings`, type your shortcut in the **Shortcut** field (one key, or a two-key chord such as `ctrl+x s`) and press Enter. streamer-mode writes it into `~/.claude/keybindings.json`, keeps your other bindings, and turns on the shortcut switch. `/streamer key <keys>` does the same from the prompt.
 
-While the shortcut is on, a small `○` / `◉` button sits in the band above the prompt; the key presses it.
+A shortcut must start with `ctrl` or `meta` (Option on a Mac), so it never types into the prompt. Claude Code's reserved keys (`ctrl+c`, `ctrl+d`…), its built-in shortcuts (`ctrl+g`, `ctrl+t`, `ctrl+x ctrl+k`…) and keys you've already bound are refused. You type the shortcut rather than press it, because Claude Code takes chord prefixes like `ctrl+x` before a mod can see them.
 
-### Leftover flag reminder
+Mods can't add their own shortcut actions, so streamer-mode borrows `app:toggleDiffNoiseFilter`, which is unbound by default and only used by the old diff panel. While the shortcut is on, a small `○` / `◉` button sits in the band above the prompt; the key presses it.
 
-If a session ended with streamer mode on, the next session shows a toast saying the status line flag is still set, so a hidden status line never goes unexplained.
+**Cmd keys**: Claude Code doesn't see Cmd in most terminals. In Ghostty, map a Cmd shortcut to your chord in its config instead, for example `keybind = super+shift+s=text:\x18s` sends `ctrl+x s`.
+
+### One switch for every session
+
+Streamer mode is one switch for the whole machine. Turn it on in any session and every open session follows within a couple of seconds; a session you start while it's on starts covered, with a toast saying so. Turning it off anywhere turns it off everywhere. The switch lives in `~/.claude/streamer-mode.state`.
 
 ### What it doesn't hide
 
@@ -83,6 +84,7 @@ The GIFs are recorded with [vhs](https://github.com/charmbracelet/vhs) in a thro
 
 ## Changelog
 
+- **0.2.3**: set your shortcut in `/streamer settings` (or `/streamer key`); it's written into keybindings.json, refusing reserved, built-in and already-bound keys. The shortcut now borrows `app:toggleDiffNoiseFilter`, since `app:toggleReplTab` opens the diff panel on Claude Code 2.1.296. Streamer mode is one switch for every session: on in one, on in all, including sessions started later.
 - **0.2.2**: warn at session start when another plugin is listed before streamer-mode in `enabledPlugins`, since mods listed earlier can't be covered.
 - **0.2.1**: a pane keeps its latest title in `/streamer settings`, since a title can name the folder it was opened on.
 - **0.2.0**: hide the conversation from before streamer mode, show the home folder as `~` in paths, remind about a leftover status line flag, opt-in keyboard shortcut.

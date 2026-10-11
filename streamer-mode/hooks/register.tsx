@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { Hide, SeenPane } from '../types'
 
@@ -7,9 +7,10 @@ const PANE = 'streamer-mode'
 const ALL: Hide = { panes: true, bands: true, status: true, history: true, paths: true, shortcut: false }
 // Hidden until the person picks their own: Filetree and Terminal Browser show file names and pages.
 const DEFAULT_PRIVATE = ['filetree', 'browser']
-// An engine action unbound by default and unhandled while the built-in /diff mod is on;
-// bound to a key in keybindings.json, it presses the streamer button from the prompt.
-const SHORTCUT_ACTION = 'app:toggleReplTab'
+// An engine action unbound by default and unhandled outside the old diff panel; bound to a key
+// in keybindings.json, it presses the streamer button from the prompt. (app:toggleReplTab
+// opens the diff panel on 2.1.296, so the button never got it.)
+const SHORTCUT_ACTION = 'app:toggleDiffNoiseFilter'
 const ROWS = ['UserMessage', 'AssistantMessage', 'ToolUse', 'ToolResult', 'ToolGroup', 'CommandOutput'] as const
 
 const isOn = atom({ plugin: 'streamer-mode', key: 'isOn' } as const, false)
@@ -24,13 +25,30 @@ const freshRows = atom({ plugin: 'streamer-mode', key: 'freshRows' } as const, [
 const freshToolIds = atom({ plugin: 'streamer-mode', key: 'freshToolIds' } as const, [] as string[])
 const rowKey = (id: string) => id.split('-').slice(0, 4).join('-')
 
+// The shortcut as keybindings.json binds it, and the last save's result.
+const shortcutKey = atom({ plugin: 'streamer-mode', key: 'shortcutKey' } as const, '')
+const shortcutNote = atom({ plugin: 'streamer-mode', key: 'shortcutNote' } as const, '')
+const RESERVED = ['ctrl+c', 'ctrl+d', 'ctrl+m', 'ctrl+i', 'ctrl+h', 'ctrl+[']
+// Claude Code's default chat and app shortcuts (code.claude.com/docs/en/keybindings), so a saved
+// shortcut never silently takes one over. Chords on ctrl+x are listed by their full sequence.
+const DEFAULTS: Record<string, string> = {
+  'ctrl+t': 'app:toggleTodos', 'ctrl+o': 'app:toggleTranscript', 'ctrl+r': 'history:search',
+  'ctrl+l': 'chat:clearInput', 'ctrl+j': 'chat:newline', 'ctrl+_': 'chat:undo', 'ctrl+g': 'chat:externalEditor',
+  'ctrl+s': 'chat:stash', 'ctrl+v': 'chat:imagePaste', 'ctrl+b': 'task:background', 'ctrl+enter': 'chat:sendNow',
+  'meta+p': 'chat:modelPicker', 'meta+o': 'chat:fastMode', 'meta+t': 'chat:thinkingToggle',
+  'ctrl+x ctrl+k': 'chat:killAgents', 'ctrl+x ctrl+e': 'chat:externalEditor', 'ctrl+x enter': 'chat:queueSubmit',
+  'ctrl+x ctrl+a': 'abovePrompt:toggle', 'ctrl+x ctrl+s': 'chat:sendNow', 'ctrl+x tab': 'abovePrompt:focus',
+  'ctrl+x ctrl+b': 'task:background', 'ctrl+x b': 'app:cycleDiffBase', 'ctrl+x x': 'pane:close',
+  'ctrl+x left': 'pane:grow', 'ctrl+x right': 'pane:shrink', 'ctrl+x up': 'pane:grow', 'ctrl+x down': 'pane:shrink',
+}
+
 const LABELS: Record<keyof Hide, string> = {
   panes: 'Panes ticked below',
   bands: 'Bands above the prompt (Reflect, Replay, …)',
   status: 'Status line (folder, branch, cost)',
   history: 'Conversation from before streamer mode',
   paths: 'Home folder in paths (shown as ~)',
-  shortcut: `Keyboard shortcut (bind a key to ${SHORTCUT_ACTION})`,
+  shortcut: 'Keyboard shortcut (set it below)',
 }
 
 async function home($: EngineInterface) {
@@ -40,6 +58,20 @@ async function home($: EngineInterface) {
 // The status line script reads this file: non-empty means streamer mode is on.
 async function flagPath($: EngineInterface) {
   return `${await home($)}/.claude/streamer-mode`
+}
+
+// One switch for the whole machine: every session follows this file, so turning streamer mode on
+// in one session covers every other session, including ones started later.
+async function statePath($: EngineInterface) {
+  return `${await home($)}/.claude/streamer-mode.state`
+}
+
+async function isOnEverywhere($: EngineInterface) {
+  try {
+    return (await $.fs.read(await statePath($))).trim() === 'on'
+  } catch {
+    return false
+  }
 }
 
 function shorten<T>(value: T, from: string): T {
@@ -97,30 +129,107 @@ async function isEarlier($: EngineInterface, component: (typeof ROWS)[number], i
   return props.command !== 'streamer'
 }
 
+type Bindings = { bindings?: { context?: string; bindings?: Record<string, string | null> }[] } & Record<string, unknown>
+
+async function keybindingsPath($: EngineInterface) {
+  return `${await home($)}/.claude/keybindings.json`
+}
+
+async function readBindings($: EngineInterface): Promise<Bindings> {
+  try {
+    return JSON.parse(await $.fs.read(await keybindingsPath($))) as Bindings
+  } catch {
+    return { $schema: 'https://www.schemastore.org/claude-code-keybindings.json', bindings: [] }
+  }
+}
+
+function boundKey(file: Bindings) {
+  for (const block of file.bindings ?? []) {
+    for (const [key, action] of Object.entries(block.bindings ?? {})) if (action === SHORTCUT_ACTION) return key
+  }
+  return ''
+}
+
+// One key or a two-key chord that starts with ctrl or meta, so it never types into the prompt.
+export function checkKey(keys: string): string | null {
+  const parts = keys.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0 || parts.length > 2) return 'Use one key or a two-key chord, like ctrl+x s.'
+  if (RESERVED.includes(parts[0])) return `${parts[0]} is reserved by Claude Code.`
+  const taken = DEFAULTS[parts.join(' ')]
+  if (taken) return `${parts.join(' ')} is Claude Code's ${taken} shortcut. Pick another, such as ctrl+x s.`
+  if (!/^(ctrl|meta)\+./.test(parts[0])) return 'Start with ctrl or meta (Option), so the key never types into the prompt.'
+  return null
+}
+
+// Writes the shortcut into ~/.claude/keybindings.json, keeping every other binding.
+async function saveShortcut($: EngineInterface, raw: string) {
+  const keys = raw.trim().split(/\s+/).join(' ')
+  const problem = checkKey(keys)
+  if (problem) return problem
+  const file = await readBindings($)
+  const blocks = (file.bindings = Array.isArray(file.bindings) ? file.bindings : [])
+  for (const block of blocks) {
+    const taken = block.bindings?.[keys]
+    if (taken && taken !== SHORTCUT_ACTION) return `${keys} is already bound to ${taken} in keybindings.json.`
+  }
+  for (const block of blocks) {
+    for (const [key, action] of Object.entries(block.bindings ?? {})) if (action === SHORTCUT_ACTION) delete block.bindings![key]
+  }
+  let chat = blocks.find(b => b.context === 'Chat')
+  if (!chat) blocks.push((chat = { context: 'Chat', bindings: {} }))
+  chat.bindings = { ...(chat.bindings ?? {}), [keys]: SHORTCUT_ACTION }
+  await $.fs.write(await keybindingsPath($), JSON.stringify(file, null, 2) + '\n')
+  await update($, shortcutKey, () => keys)
+  const cur = await read($, hide)
+  if (!cur.shortcut) {
+    await update($, hide, () => ({ ...cur, shortcut: true }))
+    await $.store.set('hide', { ...cur, shortcut: true })
+  }
+  return `Shortcut saved: ${keys}`
+}
+
 async function isHidden($: EngineInterface, id: string) {
   return (await read($, isOn)) && (await read($, hide)).panes && (await read($, privatePanes)).includes(id)
 }
 
-async function apply($: EngineInterface, on: boolean) {
+// This session only: what it hides follows on/off.
+async function applyHere($: EngineInterface, on: boolean) {
   if (on && !(await read($, isOn))) {
     await update($, freshRows, () => [])
     await update($, freshToolIds, () => [])
   }
   await update($, isOn, () => on)
-  const cur = await read($, hide)
-  try {
-    await $.fs.write(await flagPath($), on && cur.status ? 'on\n' : '')
-  } catch { /* status line flag is best effort */ }
-  $.ui.status(on && !cur.bands ? '● streamer mode' : undefined)
+  $.ui.status(on && !(await read($, hide)).bands ? '● streamer mode' : undefined)
   $.ui.invalidate('ui.render')
 }
+
+// Every session: write the shared switch and the status line flag, then follow it here.
+async function apply($: EngineInterface, on: boolean) {
+  try {
+    await $.fs.write(await statePath($), on ? 'on\n' : '')
+    await $.fs.write(await flagPath($), on && (await read($, hide)).status ? 'on\n' : '')
+  } catch { /* the files are best effort; this session still follows */ }
+  await applyHere($, on)
+}
+
+async function follow($: EngineInterface) {
+  const on = await isOnEverywhere($)
+  if (on !== (await read($, isOn))) await applyHere($, on)
+}
+
+// Whether this mod draws first (see the order check at session start): only then can it cover a
+// private pane, so otherwise a private pane is refused instead of covered.
+let canCover = true
+
+// ponytail: polls the switch file every 1.5s; a file watch would react sooner if the host offers one.
+let ticker: Timer | undefined
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'streamer',
       description: 'Streamer mode: hide private panes, bands, the status line and earlier conversation while you share your screen',
-      argumentHint: '[on|off|settings]',
+      argumentHint: '[on|off|settings|key <keys>]',
       immediate: true,
     })
     const saved = (await $.store.get('hide')) as Partial<Hide> | undefined
@@ -133,16 +242,20 @@ export const register: Register = on => {
     // one draws before it, so its pane or band can't be covered.
     try {
       const settings = JSON.parse(await $.fs.read(`${await home($)}/.claude/settings.json`)) as { enabledPlugins?: Record<string, boolean> }
-      const first = Object.entries(settings.enabledPlugins ?? {}).find(([, enabled]) => enabled)?.[0]
-      if (first && !first.startsWith('streamer-mode@')) {
+      // Only an enabled install is ordered by this list; --plugin-dir and dev loads aren't.
+      const enabled = Object.entries(settings.enabledPlugins ?? {}).filter(([, isEnabled]) => isEnabled).map(([key]) => key)
+      const first = enabled[0]
+      canCover = !enabled.slice(1).some(key => key.startsWith('streamer-mode@'))
+      if (!canCover) {
         $.ui.toast(`streamer-mode can't cover mods listed before it: move "streamer-mode@…" to the top of enabledPlugins in ~/.claude/settings.json (first now: ${first})`)
       }
     } catch { /* no readable user settings */ }
-    try {
-      if ((await $.fs.read(await flagPath($))).trim()) {
-        $.ui.toast('Streamer mode status line flag is still on from an earlier session: /streamer off to clear it')
-      }
-    } catch { /* no flag file */ }
+    const bound = boundKey(await readBindings($))
+    await update($, shortcutKey, () => bound)
+    await follow($)
+    if (await read($, isOn)) $.ui.toast('Streamer mode is on. /streamer off turns it off in every session.')
+    ticker?.cancel()
+    ticker = $.clock.every(1500, () => follow($))
 
     return next(e)
   })
@@ -164,13 +277,18 @@ export const register: Register = on => {
       await $.ui.open({ id: PANE, title: 'Streamer mode', focus: true, closeOnEscape: true })
       return { text: 'Streamer mode settings opened.' }
     }
+    if (arg === 'key' || arg.startsWith('key ')) {
+      const keys = arg.slice(3).trim()
+      if (!keys) return { text: `Streamer mode shortcut: ${(await read($, shortcutKey)) || 'none'}` }
+      return { text: await saveShortcut($, keys) }
+    }
     const next = arg === 'on' ? true : arg === 'off' ? false : !(await read($, isOn))
     await apply($, next)
 
     return { text: next ? 'Streamer mode on: private panes, bands, status line and earlier conversation hidden.' : 'Streamer mode off.' }
   })
 
-  // Learn every pane that opens, and refuse a private one in streamer mode.
+  // Learn every pane that opens, and refuse a private one in streamer mode when it can't be covered.
   on('ui.open', async ($, e, next) => {
     // Keep each pane's latest title: a title can name the folder it was opened on.
     const title = e.title ?? e.id
@@ -180,7 +298,8 @@ export const register: Register = on => {
       await update($, seen, () => list)
       await $.store.set('seen', list)
     }
-    if (await isHidden($, e.id)) {
+    // Drawn first, it opens and gets covered, so it's back as it was when streamer mode turns off.
+    if (!canCover && (await isHidden($, e.id))) {
       return { deny: 'hidden in streamer mode (/streamer off to show it)' }
     }
     return next(e)
@@ -233,12 +352,18 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Button, Text } = $.ui.resolve(e)
+    const { Box, Button, Input, Text } = $.ui.resolve(e)
     const cur = await read($, hide)
     const ids = await read($, privatePanes)
     const isStreaming = await read($, isOn)
     const known = [...(await read($, seen))]
     for (const id of ids) if (!known.some(p => p.id === id)) known.push({ id, title: id })
+    const current = await read($, shortcutKey)
+    const note = await read($, shortcutNote)
+    const save = async (value: string) => {
+      const message = await saveShortcut($, value)
+      await update($, shortcutNote, () => message)
+    }
 
     const flip = async (k: keyof Hide) => {
       const nextHide = { ...cur, [k]: !cur[k] }
@@ -260,6 +385,14 @@ export const register: Register = on => {
         {(Object.keys(LABELS) as (keyof Hide)[]).map((k, i) => (
           <Button key={k} hotkey={String(i + 1)} label={`${cur[k] ? '[x]' : '[ ]'} ${LABELS[k]}`} onPress={() => flip(k)} />
         ))}
+        <Input
+          key="shortcut"
+          label={`Shortcut (now ${current || 'none'})`}
+          placeholder="ctrl+x s, meta+s, …"
+          submitLabel="Save"
+          onSubmit={save}
+        />
+        {note !== '' ? <Text dimColor>{note}</Text> : null}
         <Text dimColor>Panes (any pane opened while this mod is loaded shows up here):</Text>
         {known.map(p => (
           <Button

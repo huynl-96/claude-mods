@@ -15,18 +15,38 @@ const probe = {
   },
 }
 
-test('/streamer blocks only private panes, until turned off', { plugins: [probe] }, async ($, on) => {
+test('a private pane is covered while on, and refused when another mod is listed first', { plugins: [probe] }, async ($, on) => {
+  let order = { 'streamer-mode@claude-mods': true }
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('command.run', () => ({ value: { text: '' } }))
+  on('env.get', () => ({ value: '/Users/someone' }))
+  on('fs.write', () => ({ value: undefined }))
+  on('store.get', () => ({ value: undefined }))
+  on('command.register', () => ({ value: undefined }))
+  on('clock.every', () => ({ value: { cancel: undefined } }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('ui.status', () => ({ value: undefined }))
+  on('fs.read', (_: any, e: any) =>
+    String(e.path).endsWith('settings.json') ? { value: JSON.stringify({ enabledPlugins: order }) } : { deny: 'ENOENT' })
+  on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
+  on('ui.render', ($: any, e: any) => $.ui.resolve(e).Text({ children: 'real files' }))
   const run = (command: string, args = '') =>
     $.command.run({ command, args, origin: { kind: 'composer' } } as any)
+  const pane = async (id: string) =>
+    JSON.stringify(await $.ui.render({ surface: 'terminal', component: 'Pane', requestId: id, props: { title: id, isFocused: false, bodyColumns: 80 } } as any))
 
+  await $.session.start({ cwd: '/p' } as any)
+  await run('streamer', 'on')
   expect((await run('probe', 'filetree')).text).toBe('opened')
+  expect(await pane('filetree')).toContain('Hidden in streamer mode')
+  expect(await pane('notes')).toContain('real files')
+  await run('streamer', 'off')
+  expect(await pane('filetree')).toContain('real files')
+
+  order = { 'filetree@x': true, 'streamer-mode@claude-mods': true } as any
+  await $.session.start({ cwd: '/p' } as any)
   await run('streamer', 'on')
   expect((await run('probe', 'filetree')).text).toBe('denied')
-  expect((await run('probe', 'notes')).text).toBe('opened')
-  await run('streamer', 'off')
-  expect((await run('probe', 'filetree')).text).toBe('opened')
 })
 
 const env = (on: any) => {
@@ -81,4 +101,83 @@ test('warns at session start when another plugin is listed before streamer-mode'
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/Users/someone/project' } as any)
   expect(toasts.join('\n')).toContain('filetree@x')
+})
+
+test('no order warning when streamer-mode is loaded another way (--plugin-dir)', async ($, on) => {
+  const toasts: string[] = []
+  on('env.get', () => ({ value: '/Users/someone' }))
+  on('command.register', () => ({ value: undefined }))
+  on('store.get', () => ({ value: undefined }))
+  on('fs.read', (_: any, e: any) =>
+    String(e.path).endsWith('settings.json')
+      ? { value: JSON.stringify({ enabledPlugins: { 'filetree@x': true, 'streamer-mode@claude-mods': false } }) }
+      : { value: '' })
+  on('ui.toast', (_: any, e: any) => { toasts.push(String(e.text ?? e)); return { value: undefined } })
+  on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/Users/someone/project' } as any)
+  expect(toasts.join('\n')).not.toContain('enabledPlugins')
+})
+
+test('/streamer sets one switch for every session, and the status line flag', async ($, on) => {
+  const files: Record<string, string> = {}
+  on('command.run', () => ({ value: { text: '' } }))
+  on('env.get', () => ({ value: '/Users/someone' }))
+  on('fs.read', (_: any, e: any) => (e.path in files ? { value: files[e.path] } : { deny: 'ENOENT' }))
+  on('fs.write', (_: any, e: any) => { files[e.path] = e.text; return { value: undefined } })
+  const run = (args: string) => $.command.run({ command: 'streamer', args, origin: { kind: 'composer' } } as any)
+
+  await run('on')
+  expect(files['/Users/someone/.claude/streamer-mode.state']).toBe('on\n')
+  expect(files['/Users/someone/.claude/streamer-mode']).toBe('on\n')
+  await run('off')
+  expect(files['/Users/someone/.claude/streamer-mode.state']).toBe('')
+  expect(files['/Users/someone/.claude/streamer-mode']).toBe('')
+})
+
+test('/streamer key writes the shortcut and keeps other bindings', async ($, on) => {
+  const path = '/Users/someone/.claude/keybindings.json'
+  const files: Record<string, string> = {
+    [path]: JSON.stringify({ bindings: [{ context: 'Chat', bindings: { 'ctrl+e': 'chat:externalEditor', 'ctrl+x s': 'app:toggleDiffNoiseFilter' } }] }),
+  }
+  on('command.run', () => ({ value: { text: '' } }))
+  on('env.get', () => ({ value: '/Users/someone' }))
+  on('store.set', () => ({ value: undefined }))
+  on('fs.read', (_: any, e: any) => (e.path in files ? { value: files[e.path] } : { deny: 'ENOENT' }))
+  on('fs.write', (_: any, e: any) => { files[e.path] = e.text; return { value: undefined } })
+  const run = async (args: string) =>
+    (await $.command.run({ command: 'streamer', args, origin: { kind: 'composer' } } as any)).text
+
+  expect(await run('key s')).toContain('Start with ctrl or meta')
+  expect(await run('key ctrl+e')).toContain('already bound to chat:externalEditor')
+  expect(await run('key ctrl+g')).toContain("Claude Code's chat:externalEditor shortcut")
+  expect(await run('key meta+shift+s')).toBe('Shortcut saved: meta+shift+s')
+  const chat = JSON.parse(files[path]).bindings[0].bindings
+  expect(chat).toEqual({ 'ctrl+e': 'chat:externalEditor', 'meta+shift+s': 'app:toggleDiffNoiseFilter' })
+})
+
+test('the settings pane draws, with the shortcut field', async ($, on) => {
+  on('env.get', () => ({ value: '/Users/someone' }))
+  on('ui.render', ($: any, e: any) => $.ui.resolve(e).Text({ children: 'engine' }))
+  const tree = JSON.stringify(
+    await $.ui.render({ surface: 'terminal', component: 'Pane', requestId: 'streamer-mode', props: { title: 'Streamer mode', isFocused: true, bodyColumns: 80 } } as any),
+  )
+  expect(tree).toContain('Turn on')
+  expect(tree).toContain('"type":"Input"')
+  expect(tree).toContain('Shortcut (now none)')
+})
+
+test('a new session starts with streamer mode on when another session turned it on', async ($, on) => {
+  const files: Record<string, string> = { '/Users/someone/.claude/streamer-mode.state': 'on\n' }
+  on('env.get', () => ({ value: '/Users/someone' }))
+  on('command.register', () => ({ value: undefined }))
+  on('store.get', () => ({ value: undefined }))
+  on('clock.every', () => ({ value: { cancel: undefined } }))
+  const toasts: string[] = []
+  on('ui.toast', (_: any, e: any) => { toasts.push(String(e.text ?? e)); return { value: undefined } })
+  on('ui.status', () => ({ value: undefined }))
+  on('fs.read', (_: any, e: any) => (e.path in files ? { value: files[e.path] } : { deny: 'ENOENT' }))
+  on('fs.write', (_: any, e: any) => { files[e.path] = e.text; return { value: undefined } })
+  on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/Users/someone/project' } as any)
+  expect(toasts.join('\n')).toContain('Streamer mode is on. /streamer off turns it off in every session.')
 })
