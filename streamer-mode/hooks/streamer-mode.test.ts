@@ -172,6 +172,7 @@ test('a new session starts with streamer mode on when another session turned it 
   on('command.register', () => ({ value: undefined }))
   on('store.get', () => ({ value: undefined }))
   on('clock.every', () => ({ value: { cancel: undefined } }))
+  on('fs.exists', (_: any, e: any) => ({ value: e.path in files }))
   const toasts: string[] = []
   on('ui.toast', (_: any, e: any) => { toasts.push(String(e.text ?? e)); return { value: undefined } })
   on('ui.status', () => ({ value: undefined }))
@@ -180,4 +181,50 @@ test('a new session starts with streamer mode on when another session turned it 
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/Users/someone/project' } as any)
   expect(toasts.join('\n')).toContain('Streamer mode is on. /streamer off turns it off in every session.')
+})
+
+test('fails closed: unreadable settings refuse private panes', { plugins: [probe] }, async ($, on) => {
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('command.run', () => ({ value: { text: '' } }))
+  on('env.get', () => ({ value: '/Users/someone' }))
+  on('fs.write', () => ({ value: undefined }))
+  on('fs.exists', () => ({ value: false }))
+  on('fs.read', () => ({ deny: 'EACCES' }))
+  on('store.get', () => ({ value: undefined }))
+  on('command.register', () => ({ value: undefined }))
+  on('clock.every', () => ({ value: { cancel: undefined } }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('ui.status', () => ({ value: undefined }))
+  on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
+  const run = (command: string, args = '') => $.command.run({ command, args, origin: { kind: 'composer' } } as any)
+  await $.session.start({ cwd: '/p' } as any)
+  await run('streamer', 'on')
+  expect((await run('probe', 'filetree')).text).toBe('denied')
+})
+
+test('fails closed: a failed write or an unreadable switch never turns streamer mode off', async ($, on) => {
+  const toasts: string[] = []
+  let writable = false
+  on('command.run', () => ({ value: { text: '' } }))
+  on('env.get', () => ({ value: '/Users/someone' }))
+  on('fs.write', () => (writable ? { value: undefined } : { deny: 'EACCES' }))
+  on('fs.exists', () => ({ value: true }))
+  on('fs.read', () => ({ deny: 'EACCES' }))
+  on('store.get', () => ({ value: undefined }))
+  on('command.register', () => ({ value: undefined }))
+  on('clock.every', () => ({ value: { cancel: undefined } }))
+  on('ui.toast', (_: any, e: any) => { toasts.push(String(e.text ?? e)); return { value: undefined } })
+  on('ui.status', () => ({ value: undefined }))
+  on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
+  const run = (args: string) => $.command.run({ command: 'streamer', args, origin: { kind: 'composer' } } as any)
+
+  await run('on')
+  expect(toasts.join('\n')).toContain('in this session only')
+  await $.session.start({ cwd: '/p' } as any) // follows the switch: must stay on
+  expect(toasts.join('\n')).toContain('Streamer mode is on.')
+  writable = true
+  await run('on') // a successful write ends the pin; the switch is now unreadable, so state is kept
+  toasts.length = 0
+  await $.session.start({ cwd: '/p' } as any)
+  expect(toasts.join('\n')).toContain('Streamer mode is on.')
 })

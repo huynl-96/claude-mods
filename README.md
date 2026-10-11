@@ -84,6 +84,7 @@ The GIFs are recorded with [vhs](https://github.com/charmbracelet/vhs) in a thro
 
 ## Changelog
 
+- **0.2.4**: fail closed. Private panes are refused unless streamer-mode has confirmed it draws first, and a failing open-check refuses private panes instead of letting them through. An unreadable switch file, or a failed write to it, can no longer turn streamer mode off; a failed write keeps it on in that session and says so.
 - **0.2.3**: set your shortcut in `/streamer settings` (or `/streamer key`); it's written into keybindings.json, refusing reserved, built-in and already-bound keys. The shortcut now borrows `app:toggleDiffNoiseFilter`, since `app:toggleReplTab` opens the diff panel on Claude Code 2.1.296. Streamer mode is one switch for every session: on in one, on in all, including sessions started later.
 - **0.2.2**: warn at session start when another plugin is listed before streamer-mode in `enabledPlugins`, since mods listed earlier can't be covered.
 - **0.2.1**: a pane keeps its latest title in `/streamer settings`, since a title can name the folder it was opened on.

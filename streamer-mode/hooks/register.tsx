@@ -66,13 +66,20 @@ async function statePath($: EngineInterface) {
   return `${await home($)}/.claude/streamer-mode.state`
 }
 
-async function isOnEverywhere($: EngineInterface) {
+// The shared switch: true/false, or undefined when it can't be read (keep what this session has).
+async function isOnEverywhere($: EngineInterface): Promise<boolean | undefined> {
+  const path = await statePath($)
   try {
-    return (await $.fs.read(await statePath($))).trim() === 'on'
+    if (!(await $.fs.exists(path))) return false
+    return (await $.fs.read(path)).trim() === 'on'
   } catch {
-    return false
+    return undefined
   }
 }
+
+// Set when writing the shared switch failed: this session holds its own state instead of
+// following a file that still says otherwise, until a write succeeds again.
+let pinned: boolean | undefined
 
 function shorten<T>(value: T, from: string): T {
   if (from.length < 2) return value
@@ -188,8 +195,14 @@ async function saveShortcut($: EngineInterface, raw: string) {
   return `Shortcut saved: ${keys}`
 }
 
+// The private ids as last read, for the ui.open guard's error handler, which can't read state.
+let lastPrivate: string[] = DEFAULT_PRIVATE
+let lastOn = false
+
 async function isHidden($: EngineInterface, id: string) {
-  return (await read($, isOn)) && (await read($, hide)).panes && (await read($, privatePanes)).includes(id)
+  lastPrivate = await read($, privatePanes)
+  lastOn = await read($, isOn)
+  return lastOn && (await read($, hide)).panes && lastPrivate.includes(id)
 }
 
 // This session only: what it hides follows on/off.
@@ -199,6 +212,7 @@ async function applyHere($: EngineInterface, on: boolean) {
     await update($, freshToolIds, () => [])
   }
   await update($, isOn, () => on)
+  lastOn = on
   $.ui.status(on && !(await read($, hide)).bands ? '● streamer mode' : undefined)
   $.ui.invalidate('ui.render')
 }
@@ -207,19 +221,27 @@ async function applyHere($: EngineInterface, on: boolean) {
 async function apply($: EngineInterface, on: boolean) {
   try {
     await $.fs.write(await statePath($), on ? 'on\n' : '')
+    pinned = undefined
+  } catch {
+    pinned = on
+    $.ui.toast(`Couldn't write ~/.claude/streamer-mode.state, so streamer mode is ${on ? 'on' : 'off'} in this session only.`)
+  }
+  try {
     await $.fs.write(await flagPath($), on && (await read($, hide)).status ? 'on\n' : '')
-  } catch { /* the files are best effort; this session still follows */ }
+  } catch { /* status line flag is best effort */ }
   await applyHere($, on)
 }
 
 async function follow($: EngineInterface) {
+  if (pinned !== undefined) return
   const on = await isOnEverywhere($)
-  if (on !== (await read($, isOn))) await applyHere($, on)
+  if (on !== undefined && on !== (await read($, isOn))) await applyHere($, on)
 }
 
 // Whether this mod draws first (see the order check at session start): only then can it cover a
 // private pane, so otherwise a private pane is refused instead of covered.
-let canCover = true
+// Fails closed: false until the order check has read the settings and found this mod first.
+let canCover = false
 
 // ponytail: polls the switch file every 1.5s; a file watch would react sooner if the host offers one.
 let ticker: Timer | undefined
@@ -249,7 +271,9 @@ export const register: Register = on => {
       if (!canCover) {
         $.ui.toast(`streamer-mode can't cover mods listed before it: move "streamer-mode@…" to the top of enabledPlugins in ~/.claude/settings.json (first now: ${first})`)
       }
-    } catch { /* no readable user settings */ }
+    } catch {
+      canCover = false // settings unreadable: refuse private panes rather than trust a cover
+    }
     const bound = boundKey(await readBindings($))
     await update($, shortcutKey, () => bound)
     await follow($)
@@ -288,21 +312,27 @@ export const register: Register = on => {
     return { text: next ? 'Streamer mode on: private panes, bands, status line and earlier conversation hidden.' : 'Streamer mode off.' }
   })
 
-  // Learn every pane that opens, and refuse a private one in streamer mode when it can't be covered.
+  // Refuse a private pane in streamer mode when it can't be covered, then learn every pane that opens.
   on('ui.open', async ($, e, next) => {
-    // Keep each pane's latest title: a title can name the folder it was opened on.
-    const title = e.title ?? e.id
-    const known = await read($, seen)
-    if (e.id !== PANE && !known.some(p => p.id === e.id && p.title === title)) {
-      const list = [...known.filter(p => p.id !== e.id), { id: e.id, title }]
-      await update($, seen, () => list)
-      await $.store.set('seen', list)
-    }
     // Drawn first, it opens and gets covered, so it's back as it was when streamer mode turns off.
     if (!canCover && (await isHidden($, e.id))) {
       return { deny: 'hidden in streamer mode (/streamer off to show it)' }
     }
+    // Keep each pane's latest title: a title can name the folder it was opened on.
+    try {
+      const title = e.title ?? e.id
+      const known = await read($, seen)
+      if (e.id !== PANE && !known.some(p => p.id === e.id && p.title === title)) {
+        const list = [...known.filter(p => p.id !== e.id), { id: e.id, title }]
+        await update($, seen, () => list)
+        await $.store.set('seen', list)
+      }
+    } catch { /* the settings list is best effort */ }
     return next(e)
+  }).catch(($, e, next) => {
+    // The guard failed: let it through only if it had already passed, or the pane isn't private.
+    if (next.called || !lastOn || !lastPrivate.includes(e.id)) return next(e)
+    return { deny: 'hidden in streamer mode (/streamer off to show it)' }
   })
 
   // Cover an open private pane rather than close it: another mod's pane can't be reopened
