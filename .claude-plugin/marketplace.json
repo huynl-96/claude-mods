@@ -1,0 +1,12 @@
+{
+  "name": "claude-mods",
+  "owner": { "name": "huynl-96" },
+  "metadata": { "description": "Claude Code mods by huynl-96" },
+  "plugins": [
+    {
+      "name": "streamer-mode",
+      "source": "./streamer-mode",
+      "description": "/streamer hides private panes, bands and the status line while you share your screen"
+    }
+  ]
+}
