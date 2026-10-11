@@ -11,6 +11,6 @@ vhs toggle.tape          # one short prompt
 vhs paths.tape           # two short prompts
 ```
 
-`launch.sh` starts Claude Code in the demo project as a fresh session, with this repo's `streamer-mode` loaded through `--plugin-dir` and a stand-in status line, so your own status line never shows. Disable an installed `streamer-mode` while recording so `/streamer` isn't loaded twice. The first launch in a new demo folder asks to trust it: answer once by hand.
+`launch.sh` starts Claude Code in the demo project as a fresh session, with this repo's `streamer-mode` loaded through `--plugin-dir`, an installed `streamer-mode@claude-mods` switched off for that session so `/streamer` isn't loaded twice, and a stand-in status line, so your own status line never shows. The first launch in a new demo folder asks to trust it: answer once by hand.
 
-Recording toggles `~/.claude/streamer-mode`, so your other sessions' status lines hide while it runs. Before committing a GIF, look through its frames: a take that ends after `/streamer off` shows full paths again.
+Recording turns streamer mode on and off for the whole machine, so your other open sessions follow while it runs. `settings.tape` saves `ctrl+x s` as the shortcut, which rewrites `~/.claude/keybindings.json`; change the tape's keys if yours differ. Before committing a GIF, look through its frames: a take that ends after `/streamer off` shows full paths again.

@@ -38,7 +38,7 @@ While it's on:
 
 ### Pick your own panes
 
-![/streamer settings: what to hide, and which panes count as private](docs/media/settings.gif)
+![/streamer settings: what to hide, the shortcut field, and which panes count as private](docs/media/settings.gif)
 
 Open `/streamer settings`. Every pane opened while the mod is loaded is listed there; tick the ones to hide. Mods can't list each other's panes up front, so open a pane once for it to show up. Your choices are saved across sessions.
 
@@ -51,8 +51,6 @@ A mod can't redraw a custom status line, so the mod writes `~/.claude/streamer-m
 ```
 
 Status lines only rerun on session events, so add `"refreshInterval": 2` to `statusLine` in `~/.claude/settings.json` for the switch to show within 2 seconds.
-
-
 
 ### Keyboard shortcut
 
@@ -76,7 +74,10 @@ Streamer mode is one switch for the whole machine. Turn it on in any session and
 
 ### What it can do
 
-`claude plugin validate ./streamer-mode` lists it. It hooks session start, its own command, pane opening, and rows being added, and drawing panes, transcript rows and the band above the prompt. It reads `HOME` and `~/.claude/streamer-mode`, notes the ids of rows added while it's on, writes only that file, and makes no network calls and runs no programs.
+`claude plugin validate ./streamer-mode` lists it. It hooks session start, its own command, pane opening, and rows being added, and drawing panes, transcript rows and the band above the prompt. It notes the ids of rows added while it's on, checks the switch file every 1.5 seconds, and makes no network calls and runs no programs.
+
+- **Reads** `HOME`, `~/.claude/streamer-mode.state` (the switch), `~/.claude/settings.json` (only the `enabledPlugins` order) and `~/.claude/keybindings.json`.
+- **Writes** `~/.claude/streamer-mode.state` and `~/.claude/streamer-mode` (the status line flag) when you turn it on or off, and `~/.claude/keybindings.json` only when you save a shortcut.
 
 ## Re-recording the GIFs
 

@@ -1,4 +1,4 @@
-# /streamer settings: what to hide, and which panes count as private.
+# /streamer settings: what to hide, the shortcut, and which panes count as private.
 Source common.tape
 Output ../media/settings.gif
 Hide
@@ -16,7 +16,15 @@ Sleep 1500ms
 Type "s"
 Sleep 3s
 Type "s"
+Sleep 2s
+Screenshot settings-pre-key.png
+Down Down Down Down Down Down Down Down
+Sleep 800ms
+Type "ctrl+x s"
+Sleep 600ms
+Enter
 Sleep 3s
+Screenshot settings-key.png
 Hide
 Escape
 Ctrl+C Ctrl+C
