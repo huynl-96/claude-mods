@@ -4,9 +4,9 @@
   "metadata": { "description": "Claude Code mods by huynl-96" },
   "plugins": [
     {
-      "name": "streamer-mode",
-      "source": "./streamer-mode",
-      "description": "/streamer hides private panes, bands and the status line while you share your screen"
+      "name": "curtain",
+      "source": "./curtain",
+      "description": "/curtain hides private panes, bands, the status line and earlier conversation while you share your screen"
     }
   ]
 }

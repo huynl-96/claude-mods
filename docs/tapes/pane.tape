@@ -11,10 +11,10 @@ Sleep 1s
 Screenshot pane-pre.png
 Show
 Sleep 2s
-Type "/streamer" Sleep 400ms Enter
+Type "/curtain" Sleep 400ms Enter
 Sleep 4s
 Screenshot pane-on.png
-Type "/streamer off" Sleep 400ms Enter
+Type "/curtain off" Sleep 400ms Enter
 Sleep 4s
 Hide
 Ctrl+C Ctrl+C

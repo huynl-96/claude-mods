@@ -1,0 +1,10 @@
+{
+  "name": "curtain",
+  "version": "0.3.0",
+  "description": "/curtain hides private panes, bands, the status line and earlier conversation while you share your screen",
+  "author": { "name": "huynl-96", "url": "https://github.com/huynl-96" },
+  "license": "MIT",
+  "repository": "https://github.com/huynl-96/claude-mods",
+  "keywords": ["claude-code-mod", "privacy", "screen-share", "presenting"],
+  "types": "./types/index.d.ts"
+}

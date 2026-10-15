@@ -3,31 +3,31 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { Hide, SeenPane } from '../types'
 
-const PANE = 'streamer-mode'
+const PANE = 'curtain'
 const ALL: Hide = { panes: true, bands: true, status: true, history: true, paths: true, shortcut: false }
 // Hidden until the person picks their own: Filetree and Terminal Browser show file names and pages.
 const DEFAULT_PRIVATE = ['filetree', 'browser']
 // An engine action unbound by default and unhandled outside the old diff panel; bound to a key
-// in keybindings.json, it presses the streamer button from the prompt. (app:toggleReplTab
+// in keybindings.json, it presses the curtain button from the prompt. (app:toggleReplTab
 // opens the diff panel on 2.1.296, so the button never got it.)
 const SHORTCUT_ACTION = 'app:toggleDiffNoiseFilter'
 const ROWS = ['UserMessage', 'AssistantMessage', 'ToolUse', 'ToolResult', 'ToolGroup', 'CommandOutput'] as const
 
-const isOn = atom({ plugin: 'streamer-mode', key: 'isOn' } as const, false)
-const hide = atom({ plugin: 'streamer-mode', key: 'hide' } as const, ALL)
-const privatePanes = atom({ plugin: 'streamer-mode', key: 'privatePanes' } as const, DEFAULT_PRIVATE)
+const isOn = atom({ plugin: 'curtain', key: 'isOn' } as const, false)
+const hide = atom({ plugin: 'curtain', key: 'hide' } as const, ALL)
+const privatePanes = atom({ plugin: 'curtain', key: 'privatePanes' } as const, DEFAULT_PRIVATE)
 // Every pane opened while this mod was loaded, so the settings can offer it.
-const seen = atom({ plugin: 'streamer-mode', key: 'seen' } as const, [] as SeenPane[])
+const seen = atom({ plugin: 'curtain', key: 'seen' } as const, [] as SeenPane[])
 
-// Rows added since streamer mode turned on: everything else in the transcript is hidden.
+// Rows added since the curtain went on: everything else in the transcript is hidden.
 // A message row is drawn under its uuid with the last group zeroed; a tool row under its tool_use_id.
-const freshRows = atom({ plugin: 'streamer-mode', key: 'freshRows' } as const, [] as string[])
-const freshToolIds = atom({ plugin: 'streamer-mode', key: 'freshToolIds' } as const, [] as string[])
+const freshRows = atom({ plugin: 'curtain', key: 'freshRows' } as const, [] as string[])
+const freshToolIds = atom({ plugin: 'curtain', key: 'freshToolIds' } as const, [] as string[])
 const rowKey = (id: string) => id.split('-').slice(0, 4).join('-')
 
 // The shortcut as keybindings.json binds it, and the last save's result.
-const shortcutKey = atom({ plugin: 'streamer-mode', key: 'shortcutKey' } as const, '')
-const shortcutNote = atom({ plugin: 'streamer-mode', key: 'shortcutNote' } as const, '')
+const shortcutKey = atom({ plugin: 'curtain', key: 'shortcutKey' } as const, '')
+const shortcutNote = atom({ plugin: 'curtain', key: 'shortcutNote' } as const, '')
 const RESERVED = ['ctrl+c', 'ctrl+d', 'ctrl+m', 'ctrl+i', 'ctrl+h', 'ctrl+[']
 // Claude Code's default chat and app shortcuts (code.claude.com/docs/en/keybindings), so a saved
 // shortcut never silently takes one over. Chords on ctrl+x are listed by their full sequence.
@@ -46,7 +46,7 @@ const LABELS: Record<keyof Hide, string> = {
   panes: 'Panes ticked below',
   bands: 'Bands above the prompt (Reflect, Replay, …)',
   status: 'Status line (folder, branch, cost)',
-  history: 'Conversation from before streamer mode',
+  history: 'Conversation from before the curtain',
   paths: 'Home folder in paths (shown as ~)',
   shortcut: 'Keyboard shortcut (set it below)',
 }
@@ -55,15 +55,15 @@ async function home($: EngineInterface) {
   return (await $.env.get('HOME')) ?? ''
 }
 
-// The status line script reads this file: non-empty means streamer mode is on.
+// The status line script reads this file: non-empty means the curtain is on.
 async function flagPath($: EngineInterface) {
-  return `${await home($)}/.claude/streamer-mode`
+  return `${await home($)}/.claude/curtain`
 }
 
-// One switch for the whole machine: every session follows this file, so turning streamer mode on
+// One switch for the whole machine: every session follows this file, so turning the curtain on
 // in one session covers every other session, including ones started later.
 async function statePath($: EngineInterface) {
-  return `${await home($)}/.claude/streamer-mode.state`
+  return `${await home($)}/.claude/curtain.state`
 }
 
 // The shared switch: true/false, or undefined when it can't be read (keep what this session has).
@@ -102,8 +102,8 @@ const CONTENT: Record<(typeof ROWS)[number], string[]> = {
 }
 
 // Sets built once per write, rebuilt when the value's version moves.
-const ROWS_REF = { plugin: 'streamer-mode', key: 'freshRows' } as const
-const TOOL_IDS_REF = { plugin: 'streamer-mode', key: 'freshToolIds' } as const
+const ROWS_REF = { plugin: 'curtain', key: 'freshRows' } as const
+const TOOL_IDS_REF = { plugin: 'curtain', key: 'freshToolIds' } as const
 const lookups = new Map<string, { version: number; set: Set<string> }>()
 function cached(key: string, value: string[] | undefined, version: number) {
   const hit = lookups.get(key)
@@ -121,7 +121,7 @@ async function lookup($: EngineInterface, key: 'freshRows' | 'freshToolIds') {
   return cached(key, value, version)
 }
 
-// Fail closed: a row is earlier unless it was added after streamer mode turned on.
+// Fail closed: a row is earlier unless it was added after the curtain went on.
 async function isEarlier($: EngineInterface, component: (typeof ROWS)[number], id: string, props: Record<string, unknown>) {
   if (component === 'UserMessage' || component === 'AssistantMessage') {
     // A prompt just sent is drawn as a placeholder until its row is kept.
@@ -132,8 +132,8 @@ async function isEarlier($: EngineInterface, component: (typeof ROWS)[number], i
     const ids = await lookup($, 'freshToolIds')
     return ((props.calls ?? []) as { tool_use_id?: string }[]).some(c => !c.tool_use_id || !ids.has(c.tool_use_id))
   }
-  // Slash command output: hide all of it but /streamer's own.
-  return props.command !== 'streamer'
+  // Slash command output: hide all of it but /curtain's own.
+  return props.command !== 'curtain'
 }
 
 type Bindings = { bindings?: { context?: string; bindings?: Record<string, string | null> }[] } & Record<string, unknown>
@@ -213,7 +213,7 @@ async function applyHere($: EngineInterface, on: boolean) {
   }
   await update($, isOn, () => on)
   lastOn = on
-  $.ui.status(on && !(await read($, hide)).bands ? '● streamer mode' : undefined)
+  $.ui.status(on && !(await read($, hide)).bands ? '● curtain on' : undefined)
   $.ui.invalidate('ui.render')
 }
 
@@ -224,7 +224,7 @@ async function apply($: EngineInterface, on: boolean) {
     pinned = undefined
   } catch {
     pinned = on
-    $.ui.toast(`Couldn't write ~/.claude/streamer-mode.state, so streamer mode is ${on ? 'on' : 'off'} in this session only.`)
+    $.ui.toast(`Couldn't write ~/.claude/curtain.state, so the curtain is ${on ? 'on' : 'off'} in this session only.`)
   }
   try {
     await $.fs.write(await flagPath($), on && (await read($, hide)).status ? 'on\n' : '')
@@ -249,8 +249,8 @@ let ticker: Timer | undefined
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
-      name: 'streamer',
-      description: 'Streamer mode: hide private panes, bands, the status line and earlier conversation while you share your screen',
+      name: 'curtain',
+      description: 'Curtain: hide private panes, bands, the status line and earlier conversation while you share your screen',
       argumentHint: '[on|off|settings|key <keys>]',
       immediate: true,
     })
@@ -267,9 +267,9 @@ export const register: Register = on => {
       // Only an enabled install is ordered by this list; --plugin-dir and dev loads aren't.
       const enabled = Object.entries(settings.enabledPlugins ?? {}).filter(([, isEnabled]) => isEnabled).map(([key]) => key)
       const first = enabled[0]
-      canCover = !enabled.slice(1).some(key => key.startsWith('streamer-mode@'))
+      canCover = !enabled.slice(1).some(key => key.startsWith('curtain@'))
       if (!canCover) {
-        $.ui.toast(`streamer-mode can't cover mods listed before it: move "streamer-mode@…" to the top of enabledPlugins in ~/.claude/settings.json (first now: ${first})`)
+        $.ui.toast(`curtain can't cover mods listed before it: move "curtain@…" to the top of enabledPlugins in ~/.claude/settings.json (first now: ${first})`)
       }
     } catch {
       canCover = false // settings unreadable: refuse private panes rather than trust a cover
@@ -277,14 +277,14 @@ export const register: Register = on => {
     const bound = boundKey(await readBindings($))
     await update($, shortcutKey, () => bound)
     await follow($)
-    if (await read($, isOn)) $.ui.toast('Streamer mode is on. /streamer off turns it off in every session.')
+    if (await read($, isOn)) $.ui.toast('Curtain is on. /curtain off turns it off in every session.')
     ticker?.cancel()
     ticker = $.clock.every(1500, () => follow($))
 
     return next(e)
   })
 
-  // Note each row added while streamer mode is on, so it shows; anything not noted stays hidden.
+  // Note each row added while the curtain is on, so it shows; anything not noted stays hidden.
   on('session.append', async ($, e, next) => {
     if (!e.agentId && (await read($, isOn))) {
       await update($, freshRows, rows => [...rows, rowKey(e.uuid)])
@@ -295,28 +295,28 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: 'streamer' }, async ($, e) => {
+  on('command.run', { command: 'curtain' }, async ($, e) => {
     const arg = e.args.trim()
     if (arg === 'settings') {
-      await $.ui.open({ id: PANE, title: 'Streamer mode', focus: true, closeOnEscape: true })
-      return { text: 'Streamer mode settings opened.' }
+      await $.ui.open({ id: PANE, title: 'Curtain', focus: true, closeOnEscape: true })
+      return { text: 'Curtain settings opened.' }
     }
     if (arg === 'key' || arg.startsWith('key ')) {
       const keys = arg.slice(3).trim()
-      if (!keys) return { text: `Streamer mode shortcut: ${(await read($, shortcutKey)) || 'none'}` }
+      if (!keys) return { text: `Curtain shortcut: ${(await read($, shortcutKey)) || 'none'}` }
       return { text: await saveShortcut($, keys) }
     }
     const next = arg === 'on' ? true : arg === 'off' ? false : !(await read($, isOn))
     await apply($, next)
 
-    return { text: next ? 'Streamer mode on: private panes, bands, status line and earlier conversation hidden.' : 'Streamer mode off.' }
+    return { text: next ? 'Curtain on: private panes, bands, status line and earlier conversation hidden.' : 'Curtain off.' }
   })
 
-  // Refuse a private pane in streamer mode when it can't be covered, then learn every pane that opens.
+  // Refuse a private pane behind the curtain when it can't be covered, then learn every pane that opens.
   on('ui.open', async ($, e, next) => {
-    // Drawn first, it opens and gets covered, so it's back as it was when streamer mode turns off.
+    // Drawn first, it opens and gets covered, so it's back as it was when the curtain goes off.
     if (!canCover && (await isHidden($, e.id))) {
-      return { deny: 'hidden in streamer mode (/streamer off to show it)' }
+      return { deny: 'hidden by curtain (/curtain off to show it)' }
     }
     // Keep each pane's latest title: a title can name the folder it was opened on.
     try {
@@ -332,25 +332,25 @@ export const register: Register = on => {
   }).catch(($, e, next) => {
     // The guard failed: let it through only if it had already passed, or the pane isn't private.
     if (next.called || !lastOn || !lastPrivate.includes(e.id)) return next(e)
-    return { deny: 'hidden in streamer mode (/streamer off to show it)' }
+    return { deny: 'hidden by curtain (/curtain off to show it)' }
   })
 
   // Cover an open private pane rather than close it: another mod's pane can't be reopened
-  // from here, and covering lets it come back as it was when streamer mode turns off.
+  // from here, and covering lets it come back as it was when the curtain goes off.
   on('ui.render', { component: 'Pane' }, async ($, e, next) => {
     if (!(await isHidden($, e.requestId))) return next(e)
     const { Text } = $.ui.resolve(e)
-    return <Text dimColor>Hidden in streamer mode.</Text>
+    return <Text dimColor>Hidden by curtain.</Text>
   })
 
-  // Transcript rows: hide what was drawn before streamer mode, shorten paths in the rest.
+  // Transcript rows: hide what was drawn before the curtain, shorten paths in the rest.
   for (const component of ROWS) {
     on('ui.render', { component }, async ($, e, next) => {
       if (!(await read($, isOn))) return next(e)
       const cur = await read($, hide)
       if (cur.history && (await isEarlier($, component, e.requestId, e.props as Record<string, unknown>))) {
         const { Text } = $.ui.resolve(e)
-        return <Text dimColor>· hidden in streamer mode</Text>
+        return <Text dimColor>· hidden by curtain</Text>
       }
       if (!cur.paths) return next(e)
       const from = await home($)
@@ -362,13 +362,13 @@ export const register: Register = on => {
 
   // Answering without next() keeps the bands beneath this one from drawing.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const streaming = await read($, isOn)
+    const active = await read($, isOn)
     const cur = await read($, hide)
     const { Box, Button, Text } = $.ui.resolve(e)
     const shortcut = cur.shortcut
-      ? <Button key="streamer-shortcut" label={streaming ? '◉' : '○'} action={SHORTCUT_ACTION} plain dimColor onPress={() => apply($, !streaming)} />
+      ? <Button key="curtain-shortcut" label={active ? '◉' : '○'} action={SHORTCUT_ACTION} plain dimColor onPress={() => apply($, !active)} />
       : null
-    if (e.props.hasSurvey || !streaming || !cur.bands) {
+    if (e.props.hasSurvey || !active || !cur.bands) {
       if (!shortcut) return next(e)
       const below = await next(e)
       return <Box flexDirection="column">{below}{shortcut}</Box>
@@ -376,7 +376,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="row" gap={1}>
         {shortcut}
-        <Text dimColor>● streamer mode · /streamer off to stop</Text>
+        <Text dimColor>● curtain on · /curtain off to stop</Text>
       </Box>
     )
   })
@@ -385,7 +385,7 @@ export const register: Register = on => {
     const { Box, Button, Input, Text } = $.ui.resolve(e)
     const cur = await read($, hide)
     const ids = await read($, privatePanes)
-    const isStreaming = await read($, isOn)
+    const active = await read($, isOn)
     const known = [...(await read($, seen))]
     for (const id of ids) if (!known.some(p => p.id === id)) known.push({ id, title: id })
     const current = await read($, shortcutKey)
@@ -399,19 +399,19 @@ export const register: Register = on => {
       const nextHide = { ...cur, [k]: !cur[k] }
       await update($, hide, () => nextHide)
       await $.store.set('hide', nextHide)
-      if (isStreaming) await apply($, true)
+      if (active) await apply($, true)
     }
     const flipPane = async (id: string) => {
       const nextIds = ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]
       await update($, privatePanes, () => nextIds)
       await $.store.set('privatePanes', nextIds)
-      if (isStreaming) await apply($, true)
+      if (active) await apply($, true)
     }
 
     return (
       <Box flexDirection="column" gap={1}>
-        <Button key="toggle" hotkey="s" label={isStreaming ? 'Turn off' : 'Turn on'} onPress={() => apply($, !isStreaming)} />
-        <Text dimColor>In streamer mode, hide:</Text>
+        <Button key="toggle" hotkey="c" label={active ? 'Turn off' : 'Turn on'} onPress={() => apply($, !active)} />
+        <Text dimColor>While the curtain is on, hide:</Text>
         {(Object.keys(LABELS) as (keyof Hide)[]).map((k, i) => (
           <Button key={k} hotkey={String(i + 1)} label={`${cur[k] ? '[x]' : '[ ]'} ${LABELS[k]}`} onPress={() => flip(k)} />
         ))}

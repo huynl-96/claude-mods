@@ -1,7 +1,7 @@
 #!/bin/bash
 # Creates the throwaway project the README GIFs are recorded in.
 set -e
-D="${DEMO_DIR:-$HOME/tools/streamer-demo}"
+D="${DEMO_DIR:-$HOME/tools/curtain-demo}"
 mkdir -p "$D/src" && cd "$D"
 echo '{ "name": "acme-checkout", "version": "1.0.0", "private": true }' > package.json
 printf "import { charge } from './payments'\n\nexport async function checkout(cartId: string) {\n  return charge(cartId, { retries: 2 })\n}\n" > src/app.ts
